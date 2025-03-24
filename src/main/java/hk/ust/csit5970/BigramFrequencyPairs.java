@@ -2,6 +2,8 @@ package hk.ust.csit5970;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -53,6 +55,19 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			if (words.length < 2) {
+        			return; 
+    			}
+    			for (int i = 0; i < words.length - 1; i++) {
+        			String current = words[i];
+       	 			String next = words[i + 1];
+
+        			BIGRAM.set(current, next);
+        			context.write(BIGRAM, ONE);
+
+        			BIGRAM.set(current, "");
+        			context.write(BIGRAM, ONE);
+    			}
 		}
 	}
 
@@ -65,12 +80,37 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
 
+		private String currentA = null;
+		private float currentTotal = 0.0f;
+		
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
 				Context context) throws IOException, InterruptedException {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			String left = key.getLeftElement();
+    String right = key.getRightElement();
+
+    if (right.isEmpty()) { 
+        currentA = left;
+        currentTotal = 0.0f;
+        for (IntWritable val : values) {
+            currentTotal += val.get();
+        }
+        
+        context.write(key, new FloatWritable(currentTotal));
+    } else { 
+        if (!left.equals(currentA)) {
+            throw new IOException("Missing total count for " + left);
+        }
+        int sum = 0;
+        for (IntWritable val : values) {
+            sum += val.get();
+        }
+        float freq = sum / currentTotal;
+        context.write(key, new FloatWritable(freq));
+    }
 		}
 	}
 	
@@ -84,6 +124,12 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+    for (IntWritable val : values) {
+        sum += val.get();
+    }
+    SUM.set(sum);
+    context.write(key, SUM);
 		}
 	}
 
@@ -191,7 +237,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 				/ 1000.0 + " seconds");
 
 		return 0;
-	}
+	} 
 
 	/**
 	 * Dispatches command-line arguments to the tool via the {@code ToolRunner}.
