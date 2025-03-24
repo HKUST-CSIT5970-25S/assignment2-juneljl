@@ -43,6 +43,16 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			while (doc_tokenizer.hasMoreTokens()) {
+                String word = doc_tokenizer.nextToken().trim();
+                if (!word.isEmpty()) {
+                    int v=word_set.containsKey(word)?word_set.get(word):0;
+                    word_set.put(word, v + 1);
+                }
+            }
+            for (Map.Entry<String, Integer> entry : word_set.entrySet()) {
+                context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+            }
 		}
 	}
 
@@ -56,6 +66,11 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -75,6 +90,18 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			List<String> words = new ArrayList<String>(sorted_word_set);
+            for (int i = 0; i < words.size(); i++) {
+                String a = words.get(i);
+                MapWritable stripe = new MapWritable();
+                for (int j = i + 1; j < words.size(); j++) {
+                    String b = words.get(j);
+                    stripe.put(new Text(b), new IntWritable(1));
+                }
+                if (!stripe.isEmpty()) {
+                    context.write(new Text(a), stripe);
+                }
+            }
 		}
 	}
 
@@ -89,6 +116,20 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			MapWritable combined = new MapWritable();
+            for (MapWritable stripe : values) {
+                for (Map.Entry<Writable, Writable> entry : stripe.entrySet()) {
+                    Text b = (Text) entry.getKey();
+                    IntWritable count = (IntWritable) entry.getValue();
+                    if (combined.containsKey(b)) {
+                        IntWritable current = (IntWritable) combined.get(b);
+                        current.set(current.get() + count.get());
+                    } else {
+                        combined.put(b, new IntWritable(count.get()));
+                    }
+                }
+            }
+            context.write(key, combined);
 		}
 	}
 
@@ -142,6 +183,28 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			String a = key.toString();
+            Integer freqA = word_total_map.get(a);
+            if (freqA == null || freqA == 0) return;
+
+            Map<String, Integer> abCounts = new HashMap<String, Integer>();
+            for (MapWritable stripe : values) {
+                for (Map.Entry<Writable, Writable> entry : stripe.entrySet()) {
+                    String b = ((Text) entry.getKey()).toString();
+                    int count = ((IntWritable) entry.getValue()).get();
+	  	    int v=abCounts.containsKey(b)?abCounts.get(b):0;
+                    abCounts.put(b, v + count);
+                }
+            }
+
+            for (Map.Entry<String, Integer> entry : abCounts.entrySet()) {
+                String b = entry.getKey();
+                Integer freqB = word_total_map.get(b);
+                if (freqB == null || freqB == 0) continue;
+
+                double cor = (double) entry.getValue() / (freqA * freqB);
+                context.write(new PairOfStrings(a, b), new DoubleWritable(cor));
+            }
 		}
 	}
 
